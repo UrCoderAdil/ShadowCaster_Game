@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ShadowCaster — Shadow Puppet Garden Game</title>
+  <meta name="description" content="Cast shadow puppets at your webcam to grow a living garden. No keyboard, no mouse — just your hands and light. A browser-based computer vision game." />
+  <meta name="theme-color" content="#0a0e1a" />
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/src/styles/index.css" />
+</head>
+<body>
+  <!-- ═══ GAME CANVASES ═══ -->
+  <canvas id="game-canvas"></canvas>
+  <canvas id="overlay-canvas"></canvas>
+
+  <!-- ═══ CV DEBUG OVERLAY (hidden by default) ═══ -->
+  <canvas id="debug-canvas" class="debug-hidden"></canvas>
+
+  <!-- ═══ HIDDEN VIDEO ELEMENT FOR WEBCAM ═══ -->
+  <video id="webcam-video" autoplay playsinline muted></video>
+
+  <!-- ═══ OFFSCREEN CV PROCESSING CANVAS ═══ -->
+  <canvas id="cv-canvas" class="offscreen"></canvas>
+
+  <!-- ═══ UI OVERLAY ═══ -->
+  <div id="app-ui">
+    <!-- START SCREEN -->
+    <div id="start-screen" class="screen active">
+      <div class="start-content">
+        <div class="title-container">
+          <h1 class="game-title">
+            <span class="title-shadow">Shadow</span><span class="title-caster">Caster</span>
+          </h1>
+          <p class="game-subtitle">Cast shadow puppets. Grow a living garden.</p>
+        </div>
+        <div class="start-actions">
+          <button id="btn-start" class="btn btn-primary btn-glow">
+            <span class="btn-icon">🌱</span>
+            Begin
+          </button>
+          <button id="btn-continue" class="btn btn-secondary" style="display:none;">
+            <span class="btn-icon">🌿</span>
+            Continue Garden
+          </button>
+        </div>
+        <p class="start-hint">Requires a webcam &amp; a light source</p>
+      </div>
+    </div>
+
+    <!-- CALIBRATION SCREEN -->
+    <div id="calibration-screen" class="screen">
+      <div class="calibration-container glass-panel">
+        <h2 class="calibration-title">Calibration</h2>
+        <div id="calibration-steps">
+          <div class="cal-step" data-step="0">
+            <div class="cal-preview-container">
+              <canvas id="cal-preview" width="320" height="240"></canvas>
+            </div>
+            <p class="cal-instruction">Point your camera at a plain wall or surface.</p>
+            <p class="cal-detail">Make sure no shadows are visible yet.</p>
+            <button id="btn-cal-capture-bg" class="btn btn-primary">Capture Background</button>
+          </div>
+          <div class="cal-step hidden" data-step="1">
+            <div class="cal-preview-container">
+              <canvas id="cal-preview-shadow" width="320" height="240"></canvas>
+            </div>
+            <p class="cal-instruction">Now cast a shadow on the wall.</p>
+            <p class="cal-detail">Place your hand between a light source and the wall.</p>
+            <div class="cal-threshold-bar">
+              <div class="cal-threshold-fill" id="cal-threshold-fill"></div>
+            </div>
+            <button id="btn-cal-capture-shadow" class="btn btn-primary">Detect Shadow</button>
+          </div>
+          <div class="cal-step hidden" data-step="2">
+            <div class="cal-preview-container">
+              <canvas id="cal-preview-test" width="320" height="240"></canvas>
+            </div>
+            <p class="cal-instruction">Make an open hand (5 fingers spread).</p>
+            <div class="cal-confidence">
+              <span class="cal-shape-label" id="cal-shape-label">Detecting...</span>
+              <div class="cal-confidence-bar">
+                <div class="cal-confidence-fill" id="cal-confidence-fill"></div>
+              </div>
+            </div>
+            <button id="btn-cal-done" class="btn btn-primary" disabled>Start Playing!</button>
+          </div>
+        </div>
+        <button id="btn-cal-skip" class="btn btn-ghost">Skip calibration</button>
+      </div>
+    </div>
+
+    <!-- TUTORIAL OVERLAY -->
+    <div id="tutorial-overlay" class="screen">
+      <div class="tutorial-panel glass-panel">
+        <div class="tutorial-step" id="tutorial-content">
+          <div class="tutorial-gesture-icon" id="tutorial-gesture-icon">✋</div>
+          <p class="tutorial-instruction" id="tutorial-instruction">Make an open hand to call rain!</p>
+          <div class="tutorial-progress">
+            <div class="tutorial-progress-dot active"></div>
+            <div class="tutorial-progress-dot"></div>
+            <div class="tutorial-progress-dot"></div>
+          </div>
+        </div>
+        <button id="btn-skip-tutorial" class="btn btn-ghost">Skip Tutorial</button>
+      </div>
+    </div>
+
+    <!-- HUD (visible during gameplay) -->
+    <div id="hud" class="hidden">
+      <!-- Gesture indicator -->
+      <div id="hud-gesture" class="hud-panel glass-panel-mini">
+        <div class="hud-gesture-icon" id="hud-gesture-icon">—</div>
+        <div class="hud-gesture-info">
+          <span class="hud-gesture-label" id="hud-gesture-label">No shadow</span>
+          <div class="hud-confidence-bar">
+            <div class="hud-confidence-fill" id="hud-confidence-fill"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Essence counter -->
+      <div id="hud-essence" class="hud-panel glass-panel-mini">
+        <span class="hud-essence-icon">✨</span>
+        <span class="hud-essence-value" id="hud-essence-value">0</span>
+      </div>
+
+      <!-- Time & Season -->
+      <div id="hud-time" class="hud-panel glass-panel-mini">
+        <span class="hud-time-icon" id="hud-time-icon">☀️</span>
+        <span class="hud-time-label" id="hud-time-label">Day</span>
+        <span class="hud-season-label" id="hud-season-label">Spring</span>
+      </div>
+
+      <!-- Combo indicator -->
+      <div id="hud-combo" class="hud-combo hidden">
+        <span class="hud-combo-name" id="hud-combo-name"></span>
+      </div>
+
+      <!-- Achievement toast -->
+      <div id="achievement-toast" class="achievement-toast hidden">
+        <div class="achievement-icon">🏆</div>
+        <div class="achievement-info">
+          <span class="achievement-title" id="achievement-title"></span>
+          <span class="achievement-desc" id="achievement-desc"></span>
+        </div>
+      </div>
+
+      <!-- Control buttons -->
+      <div id="hud-controls" class="hud-controls">
+        <button id="btn-pause" class="btn btn-icon-round glass-panel-mini" title="Pause">⏸</button>
+        <button id="btn-biomes" class="btn btn-icon-round glass-panel-mini" title="Biomes">🌍</button>
+        <button id="btn-catalog" class="btn btn-icon-round glass-panel-mini" title="Seed Catalog">📖</button>
+        <button id="btn-achievements" class="btn btn-icon-round glass-panel-mini" title="Achievements">🏆</button>
+        <button id="btn-settings" class="btn btn-icon-round glass-panel-mini" title="Settings">⚙️</button>
+      </div>
+    </div>
+
+    <!-- PAUSE MENU -->
+    <div id="pause-menu" class="screen">
+      <div class="pause-panel glass-panel">
+        <h2>Paused</h2>
+        <button id="btn-resume" class="btn btn-primary">Resume</button>
+        <button id="btn-recalibrate" class="btn btn-secondary">Recalibrate</button>
+        <button id="btn-open-settings" class="btn btn-secondary">Settings</button>
+        <button id="btn-quit" class="btn btn-ghost">Quit to Title</button>
+      </div>
+    </div>
+
+    <!-- SETTINGS PANEL -->
+    <div id="settings-panel" class="screen">
+      <div class="settings-container glass-panel">
+        <h2>Settings</h2>
+        <div class="setting-row">
+          <label for="setting-volume">Volume</label>
+          <input type="range" id="setting-volume" min="0" max="100" value="70" />
+        </div>
+        <div class="setting-row">
+          <label for="setting-particles">Particle Density</label>
+          <input type="range" id="setting-particles" min="1" max="3" value="2" />
+        </div>
+        <div class="setting-row">
+          <label for="setting-debug">CV Debug Overlay</label>
+          <input type="checkbox" id="setting-debug" />
+        </div>
+        <div class="setting-row">
+          <label for="setting-threshold">Manual Threshold</label>
+          <input type="range" id="setting-threshold" min="10" max="200" value="80" />
+        </div>
+        <button id="btn-close-settings" class="btn btn-primary">Close</button>
+      </div>
+    </div>
+
+    <!-- BIOME SELECTOR -->
+    <div id="biome-panel" class="screen">
+      <div class="biome-container glass-panel">
+        <h2>Biomes</h2>
+        <div class="biome-grid" id="biome-grid"></div>
+        <button id="btn-close-biomes" class="btn btn-ghost">Close</button>
+      </div>
+    </div>
+
+    <!-- SEED CATALOG -->
+    <div id="catalog-panel" class="screen">
+      <div class="catalog-container glass-panel">
+        <h2>Seed Catalog</h2>
+        <div class="catalog-grid" id="catalog-grid"></div>
+        <button id="btn-close-catalog" class="btn btn-ghost">Close</button>
+      </div>
+    </div>
+
+    <!-- ACHIEVEMENT GALLERY -->
+    <div id="achievement-panel" class="screen">
+      <div class="achievement-container glass-panel">
+        <h2>Achievements</h2>
+        <div class="achievement-grid" id="achievement-grid"></div>
+        <button id="btn-close-achievements" class="btn btn-ghost">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- OpenCV.js loaded from public/ -->
+  <script async src="/opencv.js" onload="window.__opencvReady && window.__opencvReady()"></script>
+  <script type="module" src="/src/main.js"></script>
+</body>
+</html>

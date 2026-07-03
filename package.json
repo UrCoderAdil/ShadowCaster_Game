@@ -1,0 +1,24 @@
+{
+  "name": "shadowcaster",
+  "version": "1.0.0",
+  "description": "Cast shadow puppets at your webcam. Control a tiny virtual garden with your hands.",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "keywords": [
+    "shadow",
+    "puppet",
+    "computer-vision",
+    "opencv",
+    "game",
+    "garden"
+  ],
+  "author": "",
+  "license": "NUST",
+  "devDependencies": {
+    "vite": "^8.1.0"
+  }
+}
