@@ -4,6 +4,7 @@
    ═══════════════════════════════════════════════════════ */
 
 import { clamp, randomRange, lerp } from '../utils/math.js';
+import state from '../core/state.js';
 
 export class Effects {
   constructor() {
@@ -29,7 +30,7 @@ export class Effects {
     if (this.shakeIntensity > 0.01) {
       this.shakeOffsetX = (Math.random() - 0.5) * this.shakeIntensity * 20;
       this.shakeOffsetY = (Math.random() - 0.5) * this.shakeIntensity * 20;
-      this.shakeIntensity *= 0.9;
+      this.shakeIntensity *= Math.pow(0.9, dt / 16.67);
     } else {
       this.shakeIntensity = 0;
       this.shakeOffsetX = 0;
@@ -69,7 +70,7 @@ export class Effects {
     this._drawVignette(ctx, w, h);
 
     // ─── Lightning flash ───
-    if (this.flashIntensity > 0.01) {
+    if (this.flashIntensity > 0.01 && !state.get('reducedMotion')) {
       ctx.fillStyle = `rgba(255, 255, 240, ${this.flashIntensity * 0.4})`;
       ctx.fillRect(0, 0, w, h);
     }
@@ -158,7 +159,7 @@ export class Effects {
 
   /** Trigger screen shake. */
   triggerShake(intensity = 1) {
-    this.shakeIntensity = intensity;
+    this.shakeIntensity = state.get('reducedMotion') ? 0 : intensity * 0.5;
   }
 
   /** Start a biome transition. */

@@ -3,14 +3,12 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>ShadowCaster — Shadow Puppet Garden Game</title>
-  <meta name="description" content="Cast shadow puppets at your webcam to grow a living garden. No keyboard, no mouse — just your hands and light. A browser-based computer vision game." />
+  <title>ShadowCaster — A world at your fingertips</title>
+  <meta name="description" content="Grow a living garden with direct finger gestures or shadow puppets. A camera-powered browser game with five spells, changing seasons, and five worlds to discover." />
   <meta name="theme-color" content="#0a0e1a" />
   <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="/src/styles/index.css" />
+  <link rel="stylesheet" href="/src/styles/experience.css" />
 </head>
 <body>
   <!-- ═══ GAME CANVASES ═══ -->
@@ -30,31 +28,41 @@
   <div id="app-ui">
     <!-- START SCREEN -->
     <div id="start-screen" class="screen active">
+      <header class="title-header"><span class="wordmark">✦ SHADOWCASTER</span><span class="edition">AN EXPERIMENT IN HANDS &amp; WONDER</span></header>
       <div class="start-content">
         <div class="title-container">
-          <h1 class="game-title">
-            <span class="title-shadow">Shadow</span><span class="title-caster">Caster</span>
-          </h1>
-          <p class="game-subtitle">Cast shadow puppets. Grow a living garden.</p>
+          <p class="eyebrow">YOUR HANDS. FIVE SPELLS. A LIVING WORLD.</p>
+          <h1 class="game-title">A little world.<br><em>At your fingertips.</em></h1>
+          <p class="game-subtitle">Call the rain. Wake the wild. Turn a simple gesture into something extraordinary.</p>
+        </div>
+        <div class="mode-picker" role="group" aria-label="Choose camera control mode">
+          <button class="mode-card selected" data-mode="fingers" aria-pressed="true"><span class="mode-number">01 / DIRECT</span><strong>Finger gestures <span>↗</span></strong><small>Just you and your webcam.<br>No shadows or extra light needed.</small></button>
+          <button class="mode-card" data-mode="shadow" aria-pressed="false"><span class="mode-number">02 / SHADOW</span><strong>Shadow play <span>↗</span></strong><small>A light, a wall, a little magic.<br>Bring your silhouettes to life.</small></button>
         </div>
         <div class="start-actions">
           <button id="btn-start" class="btn btn-primary btn-glow">
-            <span class="btn-icon">🌱</span>
-            Begin
+            Enter your garden <span aria-hidden="true">→</span>
           </button>
           <button id="btn-continue" class="btn btn-secondary" style="display:none;">
             <span class="btn-icon">🌿</span>
             Continue Garden
           </button>
         </div>
-        <p class="start-hint">Requires a webcam &amp; a light source</p>
+        <button id="btn-explore" class="btn btn-ghost">Explore without a camera →</button>
+        <p id="start-error" class="status-error" role="alert"></p>
+        <p class="start-hint">Camera processing stays on this device. Headphones recommended.</p>
       </div>
+      <div class="world-caption"><span>THE MOONLIT MEADOW</span><p>Every garden begins<br>with a small gesture.</p></div>
+      <footer class="title-footer"><span>FIVE BIOMES TO DISCOVER</span><span>GROW · HARVEST · DISCOVER</span></footer>
     </div>
+
+    <div id="loading-screen" class="screen"><div class="glass-panel loading-panel"><p class="eyebrow">OPENING A WINDOW TO YOUR WORLD</p><div class="loading-orbit" aria-hidden="true">✦</div><h2>One small moment.</h2><p id="loading-status" role="status">Preparing…</p><button id="btn-cancel-setup" class="btn btn-ghost">Back</button></div></div>
 
     <!-- CALIBRATION SCREEN -->
     <div id="calibration-screen" class="screen">
       <div class="calibration-container glass-panel">
-        <h2 class="calibration-title">Calibration</h2>
+        <p class="eyebrow">CAMERA SETUP · ALL PROCESSING IS LOCAL</p>
+        <h2 class="calibration-title" id="calibration-title">Find your shadow.</h2>
         <div id="calibration-steps">
           <div class="cal-step" data-step="0">
             <div class="cal-preview-container">
@@ -79,7 +87,8 @@
             <div class="cal-preview-container">
               <canvas id="cal-preview-test" width="320" height="240"></canvas>
             </div>
-            <p class="cal-instruction">Make an open hand (5 fingers spread).</p>
+            <p class="cal-instruction" id="cal-test-instruction">Make an open hand (5 fingers spread).</p>
+            <p class="cal-detail">Hold the pose briefly. Lower your hand between casts to repeat a spell.</p>
             <div class="cal-confidence">
               <span class="cal-shape-label" id="cal-shape-label">Detecting...</span>
               <div class="cal-confidence-bar">
@@ -90,6 +99,7 @@
           </div>
         </div>
         <button id="btn-cal-skip" class="btn btn-ghost">Skip calibration</button>
+        <button id="btn-cancel-calibration" class="btn btn-ghost">Back</button>
       </div>
     </div>
 
@@ -111,11 +121,14 @@
 
     <!-- HUD (visible during gameplay) -->
     <div id="hud" class="hidden">
+      <div class="garden-identity"><span class="wordmark">✦ SHADOWCASTER</span><span id="biome-name">Moonlit meadow</span></div>
+      <div class="garden-goal"><span class="eyebrow">NEXT DISCOVERY</span><strong id="goal-label">Deep Forest · 50 essence</strong><div class="goal-track"><i id="goal-fill"></i></div><small>Rain helps plants grow. Harvest blooms for essence.</small></div>
+      <div id="camera-monitor" class="camera-monitor"><div class="monitor-heading"><span id="input-mode-label">FINGER TRACKING</span><button id="btn-toggle-preview" aria-label="Hide camera preview">−</button></div><canvas id="tracking-preview" width="320" height="240" aria-label="Mirrored camera preview with tracking overlay"></canvas><div id="tracking-status" role="status">Bring your hand into view</div></div>
       <!-- Gesture indicator -->
       <div id="hud-gesture" class="hud-panel glass-panel-mini">
         <div class="hud-gesture-icon" id="hud-gesture-icon">—</div>
         <div class="hud-gesture-info">
-          <span class="hud-gesture-label" id="hud-gesture-label">No shadow</span>
+          <span class="hud-gesture-label" id="hud-gesture-label">Ready to cast</span>
           <div class="hud-confidence-bar">
             <div class="hud-confidence-fill" id="hud-confidence-fill"></div>
           </div>
@@ -156,7 +169,17 @@
         <button id="btn-catalog" class="btn btn-icon-round glass-panel-mini" title="Seed Catalog">📖</button>
         <button id="btn-achievements" class="btn btn-icon-round glass-panel-mini" title="Achievements">🏆</button>
         <button id="btn-settings" class="btn btn-icon-round glass-panel-mini" title="Settings">⚙️</button>
+        <button id="btn-fullscreen" class="btn btn-icon-round glass-panel-mini" title="Toggle fullscreen" aria-label="Toggle fullscreen">⛶</button>
+        <button id="btn-mute" class="btn btn-icon-round glass-panel-mini" title="Mute audio" aria-label="Mute audio">♪</button>
       </div>
+      <div class="spell-dock" role="group" aria-label="Gesture spell guide">
+        <button class="spell" data-shape="open_hand"><span class="spell-key">1</span><span class="spell-icon">✋</span><strong>Rain</strong><small>Open palm</small></button>
+        <button class="spell" data-shape="fist"><span class="spell-key">2</span><span class="spell-icon">✊</span><strong>Impact</strong><small>Closed fist</small></button>
+        <button class="spell" data-shape="scissors"><span class="spell-key">3</span><span class="spell-icon">✌</span><strong>Harvest</strong><small id="harvest-pose">Index + middle</small></button>
+        <button class="spell" data-shape="peace_sign"><span class="spell-key">4</span><span class="spell-icon">🤘</span><strong>Summon</strong><small id="summon-pose">Index + pinky</small></button>
+        <button class="spell" data-shape="pointing"><span class="spell-key">5</span><span class="spell-icon">☝</span><strong>Lightning</strong><small>Point index</small></button>
+      </div>
+      <p id="spell-instruction" class="spell-instruction">Hold a pose briefly · lower your hand to cast again</p>
     </div>
 
     <!-- PAUSE MENU -->
@@ -165,6 +188,7 @@
         <h2>Paused</h2>
         <button id="btn-resume" class="btn btn-primary">Resume</button>
         <button id="btn-recalibrate" class="btn btn-secondary">Recalibrate</button>
+        <button id="btn-switch-mode" class="btn btn-secondary">Switch input mode</button>
         <button id="btn-open-settings" class="btn btn-secondary">Settings</button>
         <button id="btn-quit" class="btn btn-ghost">Quit to Title</button>
       </div>
@@ -174,6 +198,10 @@
     <div id="settings-panel" class="screen">
       <div class="settings-container glass-panel">
         <h2>Settings</h2>
+        <div class="setting-row">
+          <label for="setting-motion">Reduce motion &amp; flashes</label>
+          <input type="checkbox" id="setting-motion" />
+        </div>
         <div class="setting-row">
           <label for="setting-volume">Volume</label>
           <input type="range" id="setting-volume" min="0" max="100" value="70" />
@@ -186,8 +214,8 @@
           <label for="setting-debug">CV Debug Overlay</label>
           <input type="checkbox" id="setting-debug" />
         </div>
-        <div class="setting-row">
-          <label for="setting-threshold">Manual Threshold</label>
+        <div class="setting-row" id="threshold-setting">
+          <label for="setting-threshold">Shadow sensitivity</label>
           <input type="range" id="setting-threshold" min="10" max="200" value="80" />
         </div>
         <button id="btn-close-settings" class="btn btn-primary">Close</button>
@@ -222,8 +250,7 @@
     </div>
   </div>
 
-  <!-- OpenCV.js loaded from public/ -->
-  <script async src="/opencv.js" onload="window.__opencvReady && window.__opencvReady()"></script>
+  <div id="status-message" class="status-message hidden" role="status" aria-live="polite"></div>
   <script type="module" src="/src/main.js"></script>
 </body>
 </html>

@@ -17,6 +17,9 @@ function createDefaultState() {
     isPaused: false,
     isCalibrated: false,
     tutorialDone: false,
+    inputMode: 'fingers',
+    aim: null,
+    reducedMotion: false,
 
     // Time
     gameTime: 0,            // total ms elapsed in-game
@@ -124,6 +127,7 @@ class GameState {
         volume: this._state.volume,
         particleDensity: this._state.particleDensity,
         seasonIndex: this._state.seasonIndex,
+        reducedMotion: this._state.reducedMotion,
       };
       localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
     } catch (e) {
@@ -162,6 +166,7 @@ class GameState {
       this._state.volume = data.volume ?? 0.7;
       this._state.particleDensity = data.particleDensity ?? 2;
       this._state.seasonIndex = data.seasonIndex ?? 0;
+      this._state.reducedMotion = data.reducedMotion ?? false;
       this._state.isCalibrated = false; // always recalibrate on load
 
       this._notify();
@@ -174,7 +179,7 @@ class GameState {
 
   /** Check if a save exists. */
   hasSave() {
-    return localStorage.getItem(STORAGE_KEY) !== null;
+    try { return localStorage.getItem(STORAGE_KEY) !== null; } catch { return false; }
   }
 
   /** Reset to defaults. */

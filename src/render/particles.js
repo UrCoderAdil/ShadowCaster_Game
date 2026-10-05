@@ -56,7 +56,7 @@ export class ParticleSystem {
     events.on('game:smash', ({ x, y }) => this.emitSmash(x, y));
     events.on('game:harvest', ({ x, y, reward }) => this.emitHarvest(x, y, reward));
     events.on('game:lightning', ({ x, y }) => this.emitLightning(x, y));
-    events.on('game:summon', () => this.emitSummonSparkle());
+    events.on('game:summon', ({ x, y }) => this.emitSummonSparkle(x, y));
     events.on('combo:triggered', (combo) => this.emitCombo(combo));
   }
 
@@ -393,9 +393,14 @@ export class ParticleSystem {
     }
   }
 
-  emitSummonSparkle() {
-    // Sparkle effect in the center of screen
-    // Actual position will be updated by the caller if needed
+  emitSummonSparkle(x, y) {
+    for (let i = 0; i < 24 * this._densityMultiplier; i++) {
+      if (this.pool.activeCount >= MAX_PARTICLES) break;
+      const p = this.pool.acquire(), angle = i / 24 * Math.PI * 2;
+      p.type = 'spark'; p.x = x + Math.cos(angle) * 22; p.y = y + Math.sin(angle) * 22;
+      p.vx = Math.cos(angle) * 1.5; p.vy = -2 + Math.sin(angle); p.size = 2;
+      p.maxLife = 1800; p.color = '#d9bfff';
+    }
   }
 
   emitCombo(combo) {

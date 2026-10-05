@@ -21,25 +21,27 @@ export class Capture {
    * Start webcam capture.
    * Desktop: front camera. Mobile: back camera.
    */
-  async start() {
+  async start(mode = 'fingers') {
+    if (this.ready) return true;
     try {
+      if (!navigator.mediaDevices?.getUserMedia) throw new Error('Camera access requires HTTPS or localhost. Start the game with npm run dev, or use a secure URL.');
       const constraints = {
         video: {
           width: { ideal: 640 },
           height: { ideal: 480 },
-          facingMode: this._isMobile ? { ideal: 'environment' } : 'user',
+          facingMode: { ideal: this._isMobile && mode === 'shadow' ? 'environment' : 'user' },
         },
         audio: false,
       };
 
       this.stream = await navigator.mediaDevices.getUserMedia(constraints);
-      this.video.srcObject = this.stream;
-
       await new Promise((resolve, reject) => {
+        const timeout = setTimeout(() => reject(new Error('Camera did not provide a video stream. Try another camera.')), 10000);
         this.video.onloadedmetadata = () => {
-          this.video.play().then(resolve).catch(reject);
+          this.video.play().then(() => { clearTimeout(timeout); resolve(); }).catch(reject);
         };
-        this.video.onerror = reject;
+        this.video.onerror = error => { clearTimeout(timeout); reject(error); };
+        this.video.srcObject = this.stream;
       });
 
       this.ready = true;
@@ -47,7 +49,9 @@ export class Capture {
       return true;
     } catch (err) {
       console.error('[Capture] Webcam failed:', err);
-      this.ready = false;
+      this.error = err.name === 'NotAllowedError' ? 'Camera permission was denied. Allow camera access in your browser, then try again.' :
+        err.name === 'NotFoundError' ? 'No camera found. Connect a webcam or explore with the spell buttons.' : err.message;
+      this.stop();
       return false;
     }
   }
@@ -79,6 +83,7 @@ export class Capture {
       this.stream = null;
     }
     this.ready = false;
+    this.video.srcObject = null;
   }
 
   /** Is mobile device? */

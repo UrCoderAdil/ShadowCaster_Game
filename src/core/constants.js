@@ -26,7 +26,7 @@ export const SHAPE_LABELS = {
   [SHAPE.OPEN_HAND]: 'Open Hand',
   [SHAPE.FIST]: 'Fist',
   [SHAPE.SCISSORS]: 'Scissors',
-  [SHAPE.PEACE_SIGN]: 'Peace Sign',
+  [SHAPE.PEACE_SIGN]: 'Summon',
   [SHAPE.POINTING]: 'Pointing',
 };
 
@@ -35,7 +35,7 @@ export const SHAPE_ICONS = {
   [SHAPE.OPEN_HAND]: '✋',
   [SHAPE.FIST]: '✊',
   [SHAPE.SCISSORS]: '✌️',
-  [SHAPE.PEACE_SIGN]: '🤞',
+  [SHAPE.PEACE_SIGN]: '🤘',
   [SHAPE.POINTING]: '👆',
 };
 
@@ -143,8 +143,8 @@ export const SKY_COLORS = {
 };
 
 export const SEASON_PALETTE = {
-  spring: { leaf: '#4ade80', flower: '#f472b6', ground: '#92400e' },
-  summer: { leaf: '#16a34a', flower: '#facc15', ground: '#78350f' },
+  spring: { leaf: '#72b390', flower: '#edc9bd', ground: '#203d2b' },
+  summer: { leaf: '#699c72', flower: '#e5d69d', ground: '#203d2b' },
   autumn: { leaf: '#f97316', flower: '#dc2626', ground: '#451a03' },
   winter: { leaf: '#94a3b8', flower: '#e2e8f0', ground: '#374151' },
 };

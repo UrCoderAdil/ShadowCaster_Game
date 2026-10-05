@@ -39,6 +39,7 @@ export class Tutorial {
 
   /** Start the tutorial. */
   start() {
+    this.cancel();
     if (state.get('tutorialDone')) {
       this._finish();
       return;
@@ -86,7 +87,7 @@ export class Tutorial {
 
       if (this.currentStep >= TUTORIAL_STEPS.length) {
         // Tutorial complete
-        setTimeout(() => this._finish(), 1000);
+        this._finishTimer = setTimeout(() => this._finish(), 1000);
       } else {
         this._showStep(this.currentStep);
       }
@@ -105,6 +106,8 @@ export class Tutorial {
 
     events.emit('tutorial:done');
   }
+
+  cancel() { clearTimeout(this._finishTimer); this.active = false; this.overlay.classList.remove('active'); this._unsubShape?.(); this._unsubShape = null; }
 }
 
 export default Tutorial;

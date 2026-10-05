@@ -137,7 +137,7 @@ export class CreatureManager {
     this.creatures = [];
     this.maxCreatures = 15;
 
-    events.on('game:smash', ({ x, y }) => {
+    this._unsubSmash = events.on('game:smash', ({ x, y }) => {
       for (const c of this.creatures) {
         if (distance(c.pos.x, c.pos.y, x, y) < 300) {
           c.fleeFrom(x, y);
@@ -173,6 +173,8 @@ export class CreatureManager {
   clear() {
     this.creatures = [];
   }
+
+  destroy() { this.clear(); this._unsubSmash?.(); }
 }
 
 export default CreatureManager;

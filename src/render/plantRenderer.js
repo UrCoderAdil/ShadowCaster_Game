@@ -181,7 +181,7 @@ export class PlantRenderer {
     // Petals
     for (let i = 0; i < petalCount; i++) {
       const angle = (i / petalCount) * Math.PI * 2 + this._time * 0.2;
-      ctx.fillStyle = hslToString((hue + 300) % 360, 70, 65);
+      ctx.fillStyle = hslToString((hue + 300) % 360, 48, 76);
       ctx.beginPath();
       ctx.ellipse(
         Math.cos(angle) * flowerSize * 0.5,

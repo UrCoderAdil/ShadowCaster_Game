@@ -70,6 +70,7 @@ export class Weather {
       this.isSnowing = false;
       this.snowIntensity = Math.max(0, this.snowIntensity - 0.01);
     }
+    events.emit('weather:mix', { rainIntensity: this.rainIntensity });
   }
 
   /** Start rain from gesture. */

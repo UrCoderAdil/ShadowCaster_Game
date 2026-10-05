@@ -10,6 +10,9 @@ import { BIOMES, PLANT_SPECIES, ACHIEVEMENTS } from '../core/constants.js';
 export class Menu {
   constructor(audioEngine) {
     this.audio = audioEngine;
+    this.selectedMode = 'fingers';
+    this.returnToPause = false;
+    this._bindModes();
     this._bindStartScreen();
     this._bindPauseMenu();
     this._bindSettings();
@@ -27,9 +30,14 @@ export class Menu {
 
   // ─── Screen Management ───
   showScreen(id) {
+    if (['settings-panel','biome-panel','catalog-panel','achievement-panel'].includes(id)) {
+      this.returnToPause = document.getElementById('pause-menu').classList.contains('active');
+      state.set('isPaused', true); events.emit('app:pause');
+    }
     document.querySelectorAll('.screen').forEach(el => el.classList.remove('active'));
     const el = document.getElementById(id);
     if (el) el.classList.add('active');
+    if (id !== 'start-screen') el?.querySelector('button:not(:disabled)')?.focus();
   }
 
   hideScreen(id) {
@@ -39,6 +47,54 @@ export class Menu {
 
   hideAllScreens() {
     document.querySelectorAll('.screen').forEach(el => el.classList.remove('active'));
+  }
+
+  closePanel(id) {
+    if (this.returnToPause) this.showScreen('pause-menu');
+    else { this.hideScreen(id); state.set('isPaused', false); events.emit('app:resume'); }
+  }
+
+  pause() {
+    if (document.getElementById('hud').classList.contains('hidden')) return;
+    state.set('isPaused', true); this.showScreen('pause-menu'); events.emit('app:pause');
+  }
+
+  refreshContinue() { document.getElementById('btn-continue').style.display = state.hasSave() ? '' : 'none'; }
+
+  _bindModes() {
+    document.querySelectorAll('.mode-card').forEach(card => card.addEventListener('click', () => {
+      this.selectedMode = card.dataset.mode;
+      document.querySelectorAll('.mode-card').forEach(other => { other.classList.toggle('selected', other === card); other.setAttribute('aria-pressed', String(other === card)); });
+      document.getElementById('start-error').textContent = '';
+    }));
+    document.getElementById('btn-explore').addEventListener('click', () => { this.audio.init(); events.emit('app:start', { isNew: true, inputMode: 'explore' }); });
+    document.getElementById('btn-switch-mode').addEventListener('click', () => events.emit('app:switchmode', { inputMode: state.get('inputMode') === 'fingers' ? 'shadow' : 'fingers' }));
+    document.getElementById('btn-fullscreen').addEventListener('click', async () => {
+      try { if (document.fullscreenElement) await document.exitFullscreen(); else await document.documentElement.requestFullscreen(); }
+      catch { events.emit('ui:message', 'Fullscreen is unavailable in this browser window.'); }
+    });
+    document.getElementById('btn-mute').addEventListener('click', () => {
+      const volume = state.get('volume') > 0 ? 0 : this.lastVolume || 0.7;
+      if (state.get('volume') > 0) this.lastVolume = state.get('volume');
+      state.set('volume', volume); this.audio.setVolume(volume);
+      document.getElementById('btn-mute').setAttribute('aria-label', volume ? 'Mute audio' : 'Unmute audio');
+      document.getElementById('btn-mute').textContent = volume ? '♪' : '×';
+    });
+    document.addEventListener('keydown', event => {
+      const screen = document.querySelector('.screen.active');
+      if (event.key === 'Tab' && screen) {
+        const focusables = [...screen.querySelectorAll('button:not(:disabled), input, [tabindex="0"]')].filter(el => el.getClientRects().length);
+        const first = focusables[0], last = focusables.at(-1);
+        if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last?.focus(); }
+        else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus(); }
+      }
+      if (event.key !== 'Escape') return;
+      if (screen?.id === 'pause-menu') document.getElementById('btn-resume').click();
+      else if (screen && ['settings-panel','biome-panel','catalog-panel','achievement-panel'].includes(screen.id)) {
+        if (screen.id === 'settings-panel') this._saveSettings();
+        this.closePanel(screen.id);
+      } else if (!screen) this.pause();
+    });
   }
 
   // ─── Start Screen ───
@@ -69,7 +125,6 @@ export class Menu {
     });
 
     document.getElementById('btn-open-settings')?.addEventListener('click', () => {
-      this.hideScreen('pause-menu');
       this._populateSettings();
       this.showScreen('settings-panel');
     });
@@ -87,7 +142,7 @@ export class Menu {
   _bindSettings() {
     document.getElementById('btn-close-settings')?.addEventListener('click', () => {
       this._saveSettings();
-      this.hideScreen('settings-panel');
+      this.closePanel('settings-panel');
     });
   }
 
@@ -97,13 +152,16 @@ export class Menu {
     const debug = document.getElementById('setting-debug');
     const threshold = document.getElementById('setting-threshold');
 
-    if (vol) vol.value = (state.get('volume') || 0.7) * 100;
+    if (vol) vol.value = (state.get('volume') ?? 0.7) * 100;
+    document.getElementById('setting-motion').checked = state.get('reducedMotion');
+    document.getElementById('threshold-setting').classList.toggle('hidden', state.get('inputMode') !== 'shadow');
     if (particles) particles.value = state.get('particleDensity') || 2;
     if (debug) debug.checked = state.get('showDebug') || false;
     if (threshold) threshold.value = state.get('threshold') || 80;
   }
 
   _saveSettings() {
+    state.set('reducedMotion', document.getElementById('setting-motion').checked);
     const vol = document.getElementById('setting-volume');
     const particles = document.getElementById('setting-particles');
     const debug = document.getElementById('setting-debug');
@@ -124,12 +182,13 @@ export class Menu {
       state.set('threshold', parseInt(threshold.value));
       events.emit('cv:threshold_changed', parseInt(threshold.value));
     }
+    state.save(); events.emit('settings:changed');
   }
 
   // ─── Biomes ───
   _bindBiomes() {
     document.getElementById('btn-close-biomes')?.addEventListener('click', () => {
-      this.hideScreen('biome-panel');
+      this.closePanel('biome-panel');
     });
   }
 
@@ -147,7 +206,9 @@ export class Menu {
       const isActive = currentBiome === biome.id;
       const canAfford = essence >= (biome.cost || 0);
 
-      const card = document.createElement('div');
+      const card = document.createElement('button');
+      card.type = 'button';
+      card.disabled = !isUnlocked && !canAfford;
       card.className = `biome-card${isUnlocked ? '' : ' locked'}${isActive ? ' active' : ''}`;
       card.innerHTML = `
         <div class="biome-card-icon">${biome.icon}</div>
@@ -163,14 +224,14 @@ export class Menu {
         if (isActive) return;
         if (isUnlocked) {
           events.emit('biome:change', { biomeId: biome.id });
-          this.hideScreen('biome-panel');
+          this.closePanel('biome-panel');
         } else if (canAfford) {
           // Unlock biome
           state.set('essence', essence - biome.cost);
           unlocked.add(biome.id);
           state.set('unlockedBiomes', unlocked);
           events.emit('biome:change', { biomeId: biome.id });
-          this.hideScreen('biome-panel');
+          this.closePanel('biome-panel');
         }
       });
 
@@ -183,7 +244,7 @@ export class Menu {
   // ─── Seed Catalog ───
   _bindCatalog() {
     document.getElementById('btn-close-catalog')?.addEventListener('click', () => {
-      this.hideScreen('catalog-panel');
+      this.closePanel('catalog-panel');
     });
   }
 
@@ -213,7 +274,7 @@ export class Menu {
   // ─── Achievements ───
   _bindAchievements() {
     document.getElementById('btn-close-achievements')?.addEventListener('click', () => {
-      this.hideScreen('achievement-panel');
+      this.closePanel('achievement-panel');
     });
   }
 
@@ -243,9 +304,7 @@ export class Menu {
   // ─── HUD Control Buttons ───
   _bindHUDControls() {
     document.getElementById('btn-pause')?.addEventListener('click', () => {
-      state.set('isPaused', true);
-      this.showScreen('pause-menu');
-      events.emit('app:pause');
+      this.pause();
     });
 
     document.getElementById('btn-biomes')?.addEventListener('click', () => {

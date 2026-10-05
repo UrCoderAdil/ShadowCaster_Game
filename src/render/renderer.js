@@ -11,6 +11,11 @@ import { SEASON_PALETTE, SEASONS } from '../core/constants.js';
 import state from '../core/state.js';
 import events from '../core/events.js';
 import { fbm, lerp, clamp } from '../utils/math.js';
+import { Scene } from './scene.js';
+import { SpellEffects } from './spells.js';
+import { Terrain } from '../game/terrain.js';
+import { Plant } from '../game/plant.js';
+import { PLANT_SPECIES } from '../core/constants.js';
 
 export class Renderer {
   constructor() {
@@ -29,6 +34,8 @@ export class Renderer {
     this.plantRenderer = new PlantRenderer();
     this.creatureRenderer = new CreatureRenderer();
     this.effects = new Effects();
+    this.scene = new Scene();
+    this.spells = new SpellEffects();
 
     // State
     this._rafId = null;
@@ -52,7 +59,7 @@ export class Renderer {
   }
 
   _resize() {
-    const dpr = window.devicePixelRatio || 1;
+    const dpr = Math.min(2, window.devicePixelRatio || 1);
     const w = window.innerWidth;
     const h = window.innerHeight;
 
@@ -72,6 +79,12 @@ export class Renderer {
     if (this._world) {
       this._world.resize(w, h);
     }
+    this._attractTerrain = new Terrain(w, h);
+    this._attractPlants = Array.from({ length: 16 }, (_, i) => {
+      const x = w * (0.48 + i / 15 * 0.49);
+      const plant = new Plant(PLANT_SPECIES[['sunflower','tulip','daisy','fern'][i % 4]], x, this._attractTerrain.getGroundY(x));
+      plant.growthProgress = plant.scale = 0.75 + Math.random() * 0.25; plant._updateStage(); return plant;
+    });
   }
 
   /** Set the game world reference. */
@@ -81,16 +94,17 @@ export class Renderer {
 
   /** Start the render loop. */
   start() {
+    if (this._rafId) return;
     this._lastTime = performance.now();
     this._loop();
   }
 
   _loop() {
     const now = performance.now();
-    const dt = now - this._lastTime;
+    const dt = Math.min(50, now - this._lastTime);
     this._lastTime = now;
 
-    if (!state.get('isPaused')) {
+    if (!state.get('isPaused') || !this._world) {
       this._render(dt, now);
     }
 
@@ -99,7 +113,16 @@ export class Renderer {
 
   _render(dt, time) {
     const world = this._world;
-    if (!world) return;
+    if (!world) {
+      const ctx = this.ctx, w = this.width, h = this.height;
+      const t = state.get('reducedMotion') ? 0 : time;
+      this.overlayCtx.clearRect(0, 0, w, h);
+      this.scene.draw(ctx,w,h,t,'meadow',true);
+      this.scene.ground(ctx,w,h,this._attractTerrain,t);
+      this.plantRenderer.drawAll(ctx,this._attractPlants,'spring',0.15,t);
+      this.scene.foreground(ctx,w,h,t);
+      return;
+    }
 
     const ctx = this.ctx;
     const w = this.width;
@@ -123,13 +146,14 @@ export class Renderer {
     }
 
     // ─── Layer 1: Sky ───
-    this.sky.draw(ctx, w, h, dayProgress, dayPhase, season, moonPhase, gameTime);
+    const visualTime = state.get('reducedMotion') ? 0 : gameTime;
+    this.scene.draw(ctx,w,h,visualTime,state.get('currentBiome'),false,dayPhase);
 
     // ─── Layer 2: Terrain / Ground ───
-    this._drawTerrain(ctx, w, h, world.terrain, season, dayPhase);
+    this.scene.ground(ctx,w,h,world.terrain,visualTime,state.get('currentBiome'));
 
     // ─── Layer 3: Plants ───
-    this.plantRenderer.drawAll(ctx, world.plants, season, world.weather.windStrength, gameTime);
+    this.plantRenderer.drawAll(ctx, world.plants, season, state.get('reducedMotion') ? 0 : world.weather.windStrength, visualTime);
 
     // ─── Layer 4: Creatures ───
     this.creatureRenderer.drawAll(ctx, world.creatures.creatures, gameTime);
@@ -141,19 +165,13 @@ export class Renderer {
     // ─── Layer 5b: Pollen from flowering plants ───
     for (const plant of world.plants) {
       if ((plant.stage === 'flowering' || plant.stage === 'fruiting') && !plant.isDead) {
-        this.particles.emitPollen(plant.x, plant.y - plant.visualHeight * 0.8);
+        if (Math.random() < dt / 100) this.particles.emitPollen(plant.x, plant.y - plant.visualHeight * 0.8);
       }
     }
 
     // ─── Lightning bolt ───
-    if (world.weather.lightningActive) {
-      this.effects.drawLightning(
-        ctx,
-        this._lightningX,
-        world.terrain.getGroundY(this._lightningX),
-        w, h
-      );
-    }
+    this.spells.draw(ctx,dt,w,h,world.terrain);
+    this.scene.foreground(ctx,w,h,visualTime);
 
     ctx.restore();
 
@@ -223,6 +241,8 @@ export class Renderer {
   getParticleSystem() {
     return this.particles;
   }
+
+  clearEffects() { this.particles.pool.releaseAll(); this.spells.clear(); this.effects.shakeIntensity = 0; this.effects.flashIntensity = 0; }
 
   /** Stop the render loop. */
   stop() {

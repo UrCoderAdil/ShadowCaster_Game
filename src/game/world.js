@@ -49,22 +49,23 @@ export class World {
   }
 
   _bindEvents() {
-    events.on('shape:changed', ({ shape, confidence }) => {
+    this._unsubShape = events.on('shape:changed', ({ shape, confidence }) => {
       this._handleShape(shape, confidence);
     });
 
-    events.on('biome:change', ({ biomeId }) => {
+    this._unsubBiome = events.on('biome:change', ({ biomeId }) => {
       this._changeBiome(biomeId);
     });
   }
 
   /** Start the simulation loop. */
   start() {
+    if (this._tickInterval) return;
     this._lastTickTime = performance.now();
 
     this._tickInterval = setInterval(() => {
       const now = performance.now();
-      const dt = now - this._lastTickTime;
+      const dt = Math.min(100, now - this._lastTickTime);
       this._lastTickTime = now;
       this.tick(dt);
     }, GAME_TICK_MS);
@@ -139,7 +140,7 @@ export class World {
 
   /** Handle a detected shadow shape. */
   _handleShape(shape, confidence) {
-    if (shape === SHAPE.UNKNOWN) return;
+    if (shape === SHAPE.UNKNOWN || state.get('isPaused')) return;
 
     // Track gesture usage
     const used = state.get('gesturesUsed');
@@ -178,7 +179,8 @@ export class World {
     events.emit('game:rain');
 
     // Possibly spawn new plant if there's room
-    if (this.plants.length < this.maxPlants && Math.random() < 0.15) {
+    if (this.plants.length < this.maxPlants && this.gameTime - (this._lastSeedTime ?? -2000) > 1200) {
+      this._lastSeedTime = this.gameTime;
       this._spawnRandomPlant();
     }
 
@@ -187,7 +189,7 @@ export class World {
 
   _onSmash() {
     // Damage nearby plants, scatter particles
-    const centerX = this.width / 2;
+    const centerX = this._aimX();
     const smashRadius = 150;
 
     for (const plant of this.plants) {
@@ -209,7 +211,8 @@ export class World {
     // Find a mature/fruiting plant and harvest it
     const harvestable = this.plants.filter(p => p.canHarvest());
     if (harvestable.length > 0) {
-      const plant = harvestable[0];
+      const target = this._aimX();
+      const plant = harvestable.sort((a, b) => Math.abs(a.x - target) - Math.abs(b.x - target))[0];
       const reward = plant.harvest();
       const currentEssence = state.get('essence') || 0;
       state.update({
@@ -227,12 +230,13 @@ export class World {
   _onSummon() {
     this.creatures.summonCreature();
     state.set('totalCreaturesSummoned', (state.get('totalCreaturesSummoned') || 0) + 1);
-    events.emit('game:summon');
+    const x = this._aimX();
+    events.emit('game:summon', { x, y: this.terrain.getGroundY(x) - 60 });
     this.progression.onSummon(this);
   }
 
   _onLightning() {
-    const x = randomRange(this.width * 0.2, this.width * 0.8);
+    const x = this._aimX();
     const y = this.terrain.getGroundY(x);
     this.weather.triggerLightning(x, y);
     state.set('totalLightningStrikes', (state.get('totalLightningStrikes') || 0) + 1);
@@ -248,15 +252,16 @@ export class World {
   _spawnInitialPlants() {
     const biome = state.get('currentBiome') || 'meadow';
     const species = Object.values(PLANT_SPECIES).filter(s => s.biome === biome);
-    const count = randomInt(3, 5);
+    const count = 9;
     for (let i = 0; i < count; i++) {
       const sp = randomPick(species.filter(s => s.rarity === 'common'));
       if (sp) {
-        const x = randomRange(this.width * 0.1, this.width * 0.9);
+        const x = this.width * (0.13 + i / (count - 1) * 0.74) + randomRange(-18, 18);
         const y = this.terrain.getGroundY(x);
         const plant = new Plant(sp, x, y);
         // Start some at various growth stages
-        plant.growthProgress = randomRange(0.2, 0.8);
+        plant.growthProgress = i < 3 ? 0.78 : randomRange(0.35, 0.72);
+        plant.scale = plant.growthProgress;
         plant._updateStage();
         this.plants.push(plant);
       }
@@ -320,16 +325,24 @@ export class World {
 
   /** Resize the world dimensions. */
   resize(w, h) {
+    const scaleX = w / this.width;
     this.width = w;
     this.height = h;
     this.terrain.resize(w, h);
+    for (const plant of this.plants) { plant.x *= scaleX; plant.y = this.terrain.getGroundY(plant.x); }
   }
 
   /** Stop simulation. */
   stop() {
     if (this._tickInterval) clearInterval(this._tickInterval);
     if (this._saveInterval) clearInterval(this._saveInterval);
+    this._tickInterval = null;
+    this._saveInterval = null;
   }
+
+  destroy() { this.stop(); this._unsubShape?.(); this._unsubBiome?.(); this.creatures.destroy(); }
+
+  _aimX() { return Math.max(this.width * 0.08, Math.min(this.width * 0.92, (state.get('aim')?.x ?? 0.5) * this.width)); }
 
   /** Get current season name. */
   get season() {
